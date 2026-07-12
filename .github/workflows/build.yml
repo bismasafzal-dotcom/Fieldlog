@@ -16,25 +16,69 @@ jobs:
       - name: Get the code
         uses: actions/checkout@v4
 
-      # FIRST RUN ONLY: the repo contains fieldlog.zip and nothing else.
-      # Unpack it, commit the real files, and throw the zip away. After this,
-      # the repo looks like a normal project and this step does nothing.
-      - name: Unpack fieldlog.zip
+      - name: Show me what is actually in this repo
         run: |
-          if [ -f fieldlog.zip ]; then
-            echo "Found the zip. Unpacking..."
-            unzip -q -o fieldlog.zip -d _unpacked
-            cp -r _unpacked/fieldlog/. .
-            rm -rf _unpacked fieldlog.zip
-            git config user.name "build-bot"
-            git config user.email "build-bot@users.noreply.github.com"
-            git add -A
-            git commit -m "Unpack project files" || echo "nothing to commit"
-            git push || echo "push skipped"
-            echo "Unpacked. The repo now has the real files."
-          else
-            echo "Already unpacked. Building normally."
+          echo "===== TOP LEVEL OF THE REPO ====="
+          ls -la
+          echo
+          echo "===== EVERY FILE (first 60) ====="
+          find . -not -path './.git/*' | head -60
+
+      - name: Unpack the project
+        run: |
+          set -e
+
+          # Already unpacked? Nothing to do.
+          if [ -f settings.gradle.kts ] || [ -f settings.gradle ]; then
+            echo "settings.gradle.kts is already here. Nothing to unpack."
+            exit 0
           fi
+
+          # Find a zip ANYWHERE near the top, whatever it is called.
+          ZIP=$(find . -maxdepth 2 -iname '*.zip' -not -path './.git/*' | head -n1)
+
+          if [ -z "$ZIP" ]; then
+            echo "STOPPING: no settings.gradle.kts and no .zip file in this repo."
+            echo "The upload did not land. Here is what IS here:"
+            ls -la
+            exit 1
+          fi
+
+          echo "Found the zip: $ZIP"
+          unzip -q -o "$ZIP" -d _unpacked
+
+          # The project root is whichever folder inside the zip holds settings.gradle.kts.
+          # Do not assume it is called 'fieldlog' - go and find it.
+          SETTINGS=$(find _unpacked -name 'settings.gradle.kts' -print -quit)
+
+          if [ -z "$SETTINGS" ]; then
+            echo "STOPPING: unzipped, but no settings.gradle.kts inside."
+            echo "The zip actually contained:"
+            find _unpacked -maxdepth 3 | head -40
+            exit 1
+          fi
+
+          ROOT=$(dirname "$SETTINGS")
+          echo "Project root inside the zip: $ROOT"
+
+          # Copy everything up to top level, hidden files (.github!) included.
+          cp -r "$ROOT"/. .
+          rm -rf _unpacked "$ZIP" __MACOSX
+
+          echo "===== TOP LEVEL NOW ====="
+          ls -la
+
+          git config user.name "build-bot"
+          git config user.email "build-bot@users.noreply.github.com"
+          git add -A
+          git commit -m "Unpack project files" || echo "nothing to commit"
+          git push || echo "push skipped (not fatal, build continues)"
+
+      - name: Check the build files are really there
+        run: |
+          test -f settings.gradle.kts || { echo "settings.gradle.kts STILL missing"; ls -la; exit 1; }
+          test -f app/build.gradle.kts || { echo "app/build.gradle.kts missing"; ls -la; exit 1; }
+          echo "Build files present. Good to compile."
 
       - name: Install Java 17
         uses: actions/setup-java@v4
@@ -47,7 +91,6 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      # If the code has an error, it appears HERE in plain text. Copy it out.
       - name: Build the app
         run: gradle assembleDebug --stacktrace
 
@@ -57,7 +100,6 @@ jobs:
           name: fieldlog-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
-      # Publishes the .apk as a download link. Open it on your PHONE and tap it.
       - name: Publish it for your phone
         uses: softprops/action-gh-release@v2
         with:
