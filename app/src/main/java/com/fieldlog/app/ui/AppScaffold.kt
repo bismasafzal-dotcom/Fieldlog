@@ -46,6 +46,28 @@ import com.fieldlog.app.ui.screens.JobsScreen
 import com.fieldlog.app.ui.screens.SummaryScreen
 import com.fieldlog.app.ui.theme.SettingsStore
 
+/**
+ * Switches bottom-nav tabs safely.
+ *
+ * Every tab switch in the app must go through this one function. The bug it fixes:
+ * if one place navigates with restoreState and another navigates plainly, the saved
+ * back-stack state gets out of sync, and the next tab tap silently does nothing until
+ * the app is force-closed. Routing every switch through here keeps the contract
+ * identical everywhere, so a tab tap always lands.
+ */
+private fun navigateToTab(
+    nav: androidx.navigation.NavHostController,
+    route: String
+) {
+    if (nav.currentDestination?.route == route) return  // already here
+    nav.navigate(route) {
+        // Pop back to the start tab, saving each tab's scroll/state as we go.
+        popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true   // never two copies of the same tab
+        restoreState = true      // bring back where you left that tab
+    }
+}
+
 private enum class Tab(
     val route: String,
     val label: String,
@@ -119,14 +141,7 @@ fun AppScaffold() {
 
                     NavigationBarItem(
                         selected = selected,
-                        onClick = {
-                            nav.navigate(tab.route) {
-                                // Don't stack up copies of screens as the user taps around.
-                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
+                        onClick = { navigateToTab(nav, tab.route) },
                         icon = { Icon(tab.icon, contentDescription = tab.label) },
                         label = { Text(tab.label) },
                         colors = NavigationBarItemDefaults.colors(
@@ -157,7 +172,7 @@ fun AppScaffold() {
                     onClockIn = vm::clockIn,
                     onClockOut = { vm.clockOut() },
                     onDeleteEntry = vm::deleteEntry,
-                    onGoToJobs = { nav.navigate(Tab.JOBS.route) }
+                    onGoToJobs = { navigateToTab(nav, Tab.JOBS.route) }
                 )
             }
             composable(Tab.JOBS.route) {

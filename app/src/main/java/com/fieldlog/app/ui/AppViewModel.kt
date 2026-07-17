@@ -57,20 +57,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Jobs ----
     val jobs: StateFlow<List<Job>> = repo.activeJobs
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // ---- The clock ----
     val running: StateFlow<TimeEntry?> = repo.runningEntry
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** The job the running clock belongs to, or null when clocked out. */
     val runningJob: StateFlow<Job?> = combine(running, jobs) { entry, list ->
         entry?.let { e -> list.firstOrNull { it.id == e.jobId } }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** Today's finished + running entries, newest first. */
     val todayEntries = repo.entriesBetween(startOfToday(), FAR_FUTURE)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // ---- Summary period ----
     private val _period = MutableStateFlow(Period.WEEK)
@@ -85,11 +85,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 repo.expensesBetween(p.startMs(), FAR_FUTURE)
             ) { entries, expenses -> buildTotals(entries, expenses) }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // ---- Expenses ----
     val expenses: StateFlow<List<Expense>> = repo.allExpenses
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // ---- Messages shown in the snackbar ----
 
