@@ -1,0 +1,23 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Hi-vis amber clock face -->
+    <path
+        android:fillColor="#FFC300"
+        android:pathData="M54,54 m-26,0 a26,26 0 1,0 52,0 a26,26 0 1,0 -52,0 Z" />
+
+    <!-- Clock hands, in steel black: 7:42, the start of a shift -->
+    <path
+        android:strokeColor="#14171A"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M54,54 L54,36" />
+    <path
+        android:strokeColor="#14171A"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M54,54 L67,61" />
+</vector>

@@ -1,0 +1,9 @@
+<resources>
+    <!-- The splash colour before Compose takes over. Kept identical to the app
+         background so there is no white flash on a slow phone. -->
+    <style name="Theme.FieldLog" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/chalk</item>
+        <item name="android:statusBarColor">@color/chalk</item>
+        <item name="android:navigationBarColor">@color/chalk</item>
+    </style>
+</resources>
