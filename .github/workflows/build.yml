@@ -16,69 +16,49 @@ jobs:
       - name: Get the code
         uses: actions/checkout@v4
 
-      - name: Show me what is actually in this repo
-        run: |
-          echo "===== TOP LEVEL OF THE REPO ====="
-          ls -la
-          echo
-          echo "===== EVERY FILE (first 60) ====="
-          find . -not -path './.git/*' | head -60
-
-      - name: Unpack the project
+      # Drop a fieldlog.zip into the repo at ANY time and this replaces the source
+      # with it. That's how you take a code update without hand-editing 10 files.
+      # No zip present? It just builds whatever is already in the repo.
+      - name: Take a new zip if one was uploaded
         run: |
           set -e
-
-          # Already unpacked? Nothing to do.
-          if [ -f settings.gradle.kts ] || [ -f settings.gradle ]; then
-            echo "settings.gradle.kts is already here. Nothing to unpack."
-            exit 0
-          fi
-
-          # Find a zip ANYWHERE near the top, whatever it is called.
           ZIP=$(find . -maxdepth 2 -iname '*.zip' -not -path './.git/*' | head -n1)
 
           if [ -z "$ZIP" ]; then
-            echo "STOPPING: no settings.gradle.kts and no .zip file in this repo."
-            echo "The upload did not land. Here is what IS here:"
+            if [ -f settings.gradle.kts ]; then
+              echo "No zip. Building the source already in the repo."
+              exit 0
+            fi
+            echo "STOPPING: no source in the repo and no zip to unpack."
             ls -la
             exit 1
           fi
 
-          echo "Found the zip: $ZIP"
+          echo "Found $ZIP — unpacking it."
           unzip -q -o "$ZIP" -d _unpacked
 
-          # The project root is whichever folder inside the zip holds settings.gradle.kts.
-          # Do not assume it is called 'fieldlog' - go and find it.
           SETTINGS=$(find _unpacked -name 'settings.gradle.kts' -print -quit)
-
           if [ -z "$SETTINGS" ]; then
-            echo "STOPPING: unzipped, but no settings.gradle.kts inside."
-            echo "The zip actually contained:"
+            echo "STOPPING: that zip has no settings.gradle.kts in it. Nothing deleted."
             find _unpacked -maxdepth 3 | head -40
             exit 1
           fi
-
           ROOT=$(dirname "$SETTINGS")
           echo "Project root inside the zip: $ROOT"
 
-          # Copy everything up to top level, hidden files (.github!) included.
+          # Only now, once we KNOW the zip is good, clear the old source.
+          # This makes it a clean replace — no stale files left behind to confuse the compiler.
+          rm -rf app gradle
           cp -r "$ROOT"/. .
           rm -rf _unpacked "$ZIP" __MACOSX
-
-          echo "===== TOP LEVEL NOW ====="
-          ls -la
 
           git config user.name "build-bot"
           git config user.email "build-bot@users.noreply.github.com"
           git add -A
-          git commit -m "Unpack project files" || echo "nothing to commit"
-          git push || echo "push skipped (not fatal, build continues)"
+          git commit -m "Update source from uploaded zip" || echo "nothing to commit"
+          git push || echo "push skipped"
 
-      - name: Check the build files are really there
-        run: |
-          test -f settings.gradle.kts || { echo "settings.gradle.kts STILL missing"; ls -la; exit 1; }
-          test -f app/build.gradle.kts || { echo "app/build.gradle.kts missing"; ls -la; exit 1; }
-          echo "Build files present. Good to compile."
+          echo "Source updated."
 
       - name: Install Java 17
         uses: actions/setup-java@v4
@@ -92,7 +72,35 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build the app
-        run: gradle assembleDebug --stacktrace
+        run: |
+          gradle assembleDebug --console=plain 2>&1 | tee build.log
+          STATUS=${PIPESTATUS[0]}
+
+          if [ "$STATUS" -ne 0 ]; then
+            echo ""
+            echo "#############################################################"
+            echo "#  THE REAL ERRORS - COPY EVERYTHING BELOW                   #"
+            echo "#############################################################"
+            echo ""
+            echo "----- Kotlin compile errors -----"
+            grep -E "^e: " build.log | head -40 || echo "(none)"
+            echo ""
+            echo "----- Annotation processor / Room -----"
+            grep -iE "^error:|\[ksp\]" build.log | head -30 || echo "(none)"
+            echo ""
+            echo "----- Gradle summary -----"
+            grep -A 12 "What went wrong" build.log | head -30 || echo "(none)"
+            echo ""
+            echo "#############################################################"
+            exit 1
+          fi
+
+      - name: Save the full build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
 
       - name: Save the app file
         uses: actions/upload-artifact@v4
